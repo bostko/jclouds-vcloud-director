@@ -35,7 +35,6 @@ import javax.annotation.Resource;
 import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
-import javax.xml.namespace.QName;
 
 import org.jclouds.compute.ComputeServiceAdapter;
 import org.jclouds.compute.domain.Hardware;
@@ -61,20 +60,16 @@ import org.jclouds.vcloud.director.v1_5.domain.VAppChildren;
 import org.jclouds.vcloud.director.v1_5.domain.VAppTemplate;
 import org.jclouds.vcloud.director.v1_5.domain.Vdc;
 import org.jclouds.vcloud.director.v1_5.domain.Vm;
-import org.jclouds.vcloud.director.v1_5.domain.dmtf.cim.CimString;
 import org.jclouds.vcloud.director.v1_5.domain.dmtf.cim.ResourceAllocationSettingData;
 import org.jclouds.vcloud.director.v1_5.domain.dmtf.ovf.MsgType;
+import org.jclouds.vcloud.director.v1_5.domain.dmtf.ovf.SectionType;
 import org.jclouds.vcloud.director.v1_5.domain.network.Network;
 import org.jclouds.vcloud.director.v1_5.domain.network.NetworkAssignment;
 import org.jclouds.vcloud.director.v1_5.domain.network.NetworkConfiguration;
 import org.jclouds.vcloud.director.v1_5.domain.network.NetworkConnection;
 import org.jclouds.vcloud.director.v1_5.domain.network.VAppNetworkConfiguration;
 import org.jclouds.vcloud.director.v1_5.domain.org.Org;
-import org.jclouds.vcloud.director.v1_5.domain.params.ComposeVAppParams;
-import org.jclouds.vcloud.director.v1_5.domain.params.DeployVAppParams;
-import org.jclouds.vcloud.director.v1_5.domain.params.InstantiationParams;
-import org.jclouds.vcloud.director.v1_5.domain.params.SourcedCompositionItemParam;
-import org.jclouds.vcloud.director.v1_5.domain.params.UndeployVAppParams;
+import org.jclouds.vcloud.director.v1_5.domain.params.*;
 import org.jclouds.vcloud.director.v1_5.domain.query.QueryResultRecordType;
 import org.jclouds.vcloud.director.v1_5.domain.query.QueryResultRecords;
 import org.jclouds.vcloud.director.v1_5.domain.query.QueryResultVAppTemplateRecord;
@@ -172,13 +167,24 @@ public class VCloudDirectorComputeServiceAdapter implements
                  .customizationScript(guestCustomizationScript.render(OsFamily.WINDOWS)).build();
       }
 
-      SourcedCompositionItemParam vmItem = createVmItem(toAddVm, networkReference.getName(), guestCustomizationSection);
-      ComposeVAppParams compositionParams = ComposeVAppParams.builder()
-              .name(name)
-              .instantiationParams(instantiationParams(vdc, networkReference))
-              .sourcedItems(ImmutableList.of(vmItem))
+      final String vmName = name("vm-");
+      Reference reference = Reference.builder().name(vmName).href(toAddVm.getHref()).build();
+
+      HardwareCustomization hardwareCustomization = HardwareCustomization.builder().disk(/*instanceId*/"2000", templateOptions.getDisk()).build();
+      SourcedVmInstantiationParams sourcedVmInstantiationParams = SourcedVmInstantiationParams.builder()
+              .source(reference)
+              .hardwareCustomization(hardwareCustomization)
+//              .networkConfigSection(createNetworkConfigSection(networkReference.getName()))
+//              .guestCustomizationSection(guestCustomizationSection)
               .build();
-      VApp vApp = api.getVdcApi().composeVApp(vdc.getId(), compositionParams);
+      InstantiateVAppTemplateParams instantiate = InstantiateVAppTemplateParams.builder()
+              .name(name)
+              .source(reference)
+////              .networkConfigSection(createNetworkConfigSection(networkReference.getName()))
+//              .instantiationParams(instantiationParams(vdc, networkReference, guestCustomizationSection, templateOptions))
+              .sourcedVmInstantiationParams(sourcedVmInstantiationParams)
+              .build();
+      VApp vApp = api.getVdcApi().instantiateVApp(vdc.getId(), instantiate);
       Task compositionTask = Iterables.getFirst(vApp.getTasks(), null);
 
       logger.debug(">> awaiting vApp(%s) deployment", vApp.getId());
@@ -257,11 +263,7 @@ public class VCloudDirectorComputeServiceAdapter implements
       virtualHardwareSection = updateVirtualHardwareSection(virtualHardwareSection, processorPredicate, virtualCpus + " virtual CPU(s)", BigInteger.valueOf(virtualCpus.intValue()));
       Predicate<ResourceAllocationSettingData> memoryPredicate = resourceTypeEquals(ResourceAllocationSettingData.ResourceType.MEMORY);
       virtualHardwareSection = updateVirtualHardwareSection(virtualHardwareSection, memoryPredicate, ram + " MB of memory", BigInteger.valueOf(ram.intValue()));
-      if (disk != null) {
-         Predicate<ResourceAllocationSettingData> diskPredicate = resourceTypeEquals(ResourceAllocationSettingData.ResourceType.DISK_DRIVE);
-         Predicate<ResourceAllocationSettingData> elementPredicate = elementNameEquals("Hard disk 1");
-         virtualHardwareSection = updateVirtualHardwareSectionDisk(virtualHardwareSection, Predicates.and(diskPredicate, elementPredicate), BigInteger.valueOf(disk.intValue()));
-      }
+
       // NOTE this is not efficient but the vCD API v1.5 don't support editing hardware sections during provisioning
       Task editVirtualHardwareSectionTask = api.getVmApi().editVirtualHardwareSection(vm.getHref(), virtualHardwareSection);
       logger.debug(">> awaiting vm(%s) to be edited", vm.getId());
@@ -335,44 +337,6 @@ public class VCloudDirectorComputeServiceAdapter implements
       });
    }
 
-   private VirtualHardwareSection updateVirtualHardwareSectionDisk(VirtualHardwareSection virtualHardwareSection, 
-            Predicate<ResourceAllocationSettingData> predicate, final BigInteger capacity) {
-      return updateVirtualHardwareSection(virtualHardwareSection, predicate, new Function<ResourceAllocationSettingData, ResourceAllocationSettingData>() {
-         @Override
-         public ResourceAllocationSettingData apply(ResourceAllocationSettingData input) {
-            Set<CimString> oldHostResources = input.getHostResources();
-            CimString oldHostResource = (oldHostResources != null) ? Iterables.getFirst(oldHostResources, null) : null;
-            if (oldHostResource != null) {
-               boolean overriddenCapacity = false;
-               Map<QName, String> oldHostResourceAttribs = oldHostResource.getOtherAttributes();
-               Map<QName, String> newHostResourceAttribs = Maps.newLinkedHashMap();
-               for (Map.Entry<QName, String> entry : oldHostResourceAttribs.entrySet()) {
-                  QName key = entry.getKey();
-                  String val = entry.getValue();
-                  if ("capacity".equals(key.getLocalPart())) {
-                     val = capacity.toString();
-                     overriddenCapacity = true;
-                  }
-                  newHostResourceAttribs.put(key, val);
-               }
-               if (overriddenCapacity) {
-                  CimString newHostResource = new CimString(oldHostResource.getValue(), newHostResourceAttribs);
-                  Iterable<CimString> newHostResources = Iterables.concat(ImmutableList.of(newHostResource), Iterables.skip(oldHostResources, 1));
-                  return input.toBuilder().hostResources(newHostResources).build();
-               } else {
-                  logger.warn("Unable to find capacity in Host Resource for disk %s in hardware section; cannot resize disk to %s", input, capacity);
-               }
-            } else {
-               logger.warn("Unable to find Host Resource for disk %s in hardware section; cannot resize disk to %s", input, capacity);
-            }
-            return input;
-         }
-         @Override
-         public String toString() {
-            return "disk = " + capacity;
-         }
-      });
-   }
 
    private VirtualHardwareSection updateVirtualHardwareSection(VirtualHardwareSection virtualHardwareSection, Predicate<ResourceAllocationSettingData>
             predicate, Function<ResourceAllocationSettingData, ResourceAllocationSettingData> modifier) {
@@ -436,29 +400,18 @@ public class VCloudDirectorComputeServiceAdapter implements
       return referenceOptional.get();
    }
 
-   private SourcedCompositionItemParam createVmItem(Vm vm, String networkName, GuestCustomizationSection guestCustomizationSection) {
+   private SourcedCompositionItemParam createVmItem(Reference source, String networkName, GuestCustomizationSection guestCustomizationSection, VCloudDirectorTemplateOptions templateOptions) {
       // creating an item element. this item will contain the vm which should be added to the vapp.
-      final String name = name("vm-");
-      Reference reference = Reference.builder().name(name).href(vm.getHref()).type(vm.getType()).build();
-
       InstantiationParams vmInstantiationParams;
       Set<NetworkAssignment> networkAssignments = Sets.newLinkedHashSet();
 
-      NetworkConnection networkConnection = NetworkConnection.builder()
-              .network(networkName)
-              .ipAddressAllocationMode(NetworkConnection.IpAddressAllocationMode.POOL)
-              .isConnected(true)
-              .build();
-
-      NetworkConnectionSection networkConnectionSection = NetworkConnectionSection.builder()
-              .info(MsgType.builder().value("networkInfo").build())
-              .primaryNetworkConnectionIndex(0).networkConnection(networkConnection).build();
-
+      ImmutableSet.Builder sections = ImmutableSet.<SectionType>builder().add(createNetworkConnectionSection(networkName), guestCustomizationSection);
+//      addVirtualHardwareSection(sections, templateOptions);
       vmInstantiationParams = InstantiationParams.builder()
-              .sections(ImmutableSet.of(networkConnectionSection, guestCustomizationSection))
+              .sections(sections.build())
               .build();
 
-      SourcedCompositionItemParam.Builder vmItemBuilder = SourcedCompositionItemParam.builder().source(reference);
+      SourcedCompositionItemParam.Builder vmItemBuilder = SourcedCompositionItemParam.builder().source(source);
 
       if (vmInstantiationParams != null)
          vmItemBuilder.instantiationParams(vmInstantiationParams);
@@ -469,14 +422,51 @@ public class VCloudDirectorComputeServiceAdapter implements
       return vmItemBuilder.build();
    }
 
-   protected InstantiationParams instantiationParams(Vdc vdc, Reference network) {
-      NetworkConfiguration networkConfiguration = networkConfiguration(vdc, network);
-
-      InstantiationParams instantiationParams = InstantiationParams.builder()
-              .sections(ImmutableSet.of(
-                      networkConfigSection(network.getName(), networkConfiguration))
-              )
+   private NetworkConnectionSection createNetworkConnectionSection(String networkName) {
+      NetworkConnection networkConnection = NetworkConnection.builder()
+              .network(networkName)
+              .ipAddressAllocationMode(NetworkConnection.IpAddressAllocationMode.POOL)
+              .isConnected(true)
               .build();
+
+      return NetworkConnectionSection.builder()
+              .info(MsgType.builder().value("networkInfo").build())
+              .primaryNetworkConnectionIndex(0).networkConnection(networkConnection).build();
+   }
+
+   private NetworkConfigSection createNetworkConfigSection(String networkName) {
+      return NetworkConfigSection.builder().networkConfigs(
+              ImmutableSet.of(VAppNetworkConfiguration.builder().networkName(networkName).build())
+             ).build();
+   }
+
+   private void addVirtualHardwareSection(ImmutableSet.Builder<SectionType> sections, VCloudDirectorTemplateOptions templateOptions) {
+      Integer disk = templateOptions.getDisk();
+      if (disk != null) {
+         VirtualHardwareSection virtualHardwareSection = VirtualHardwareSection.builder()
+                 .info(MsgType.builder().value("virtual hardware section").build())
+                 .item(ResourceAllocationSettingData.builder()
+                         .allocationUnits("Gigabytes")
+                         .elementName("/")
+                         .instanceID("4") // Required field that contains unique ID within this <VirtualHardwareSection>
+                         // http://blogs.vmware.com/vapp/2009/11/virtual-hardware-in-ovf-part-1.html
+                         .resourceType(ResourceAllocationSettingData.ResourceType.BASE_PARTITIONABLE_UNIT)
+                         .virtualQuantity(new BigInteger(disk.toString()))
+                         .build()).build();
+         sections.add(virtualHardwareSection);
+      }
+   }
+
+   protected InstantiationParams instantiationParams(Vdc vdc, Reference network, GuestCustomizationSection guestCustomizationSection, VCloudDirectorTemplateOptions templateOptions) {
+      NetworkConfiguration networkConfiguration = networkConfiguration(vdc, network);
+      ImmutableSet.Builder sections = ImmutableSet.<SectionType>builder().add(
+              networkConfigSection(network.getName(), networkConfiguration));
+//      sections.add(guestCustomizationSection);
+//      addVirtualHardwareSection(sections, templateOptions);
+      InstantiationParams instantiationParams = InstantiationParams.builder()
+              .sections(
+                      sections.build()
+              ).build();
 
       return instantiationParams;
    }

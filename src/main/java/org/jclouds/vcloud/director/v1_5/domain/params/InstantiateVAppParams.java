@@ -158,8 +158,6 @@ public class InstantiateVAppParams extends VAppCreationParams {
       this.linkedClone = builder.linkedClone;
    }
 
-   @XmlElement(name = "Source", required = true)
-   private Reference source;
    @XmlElement(name = "IsSourceDelete")
    private Boolean sourceDelete;
    @XmlAttribute

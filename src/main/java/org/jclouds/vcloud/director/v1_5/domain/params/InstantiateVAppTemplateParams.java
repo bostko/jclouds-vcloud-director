@@ -23,6 +23,7 @@ import javax.xml.bind.annotation.XmlRootElement;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Objects.ToStringHelper;
+import org.jclouds.vcloud.director.v1_5.domain.section.NetworkConfigSection;
 
 /**
  * Represents vApp template instantiation parameters.
@@ -49,12 +50,24 @@ public class InstantiateVAppTemplateParams extends InstantiateVAppParams {
    public abstract static class Builder<B extends Builder<B>> extends InstantiateVAppParams.Builder<B> {
 
       private Boolean allEULAsAccepted;
+      private NetworkConfigSection networkConfigSection;
+      private SourcedVmInstantiationParams sourcedVmInstantiationParams;
 
       /**
        * @see InstantiateVAppTemplateParams#isAllEULAsAccepted()
        */
       public B allEULAsAccepted(Boolean allEULAsAccepted) {
          this.allEULAsAccepted = allEULAsAccepted;
+         return self();
+      }
+
+      public B sourcedVmInstantiationParams(SourcedVmInstantiationParams sourcedVmInstantiationParams) {
+         this.sourcedVmInstantiationParams = sourcedVmInstantiationParams;
+         return self();
+      }
+
+      public B networkConfigSection(NetworkConfigSection networkConfigSection) {
+         this.networkConfigSection = networkConfigSection;
          return self();
       }
 
@@ -70,6 +83,8 @@ public class InstantiateVAppTemplateParams extends InstantiateVAppParams {
 
    protected InstantiateVAppTemplateParams(Builder<?> builder) {
       super(builder);
+      this.sourcedVmInstantiationParams = builder.sourcedVmInstantiationParams;
+      this.networkConfigSection = builder.networkConfigSection;
       this.allEULAsAccepted = builder.allEULAsAccepted;
    }
 
@@ -77,6 +92,11 @@ public class InstantiateVAppTemplateParams extends InstantiateVAppParams {
       // for JAXB
    }
 
+   @XmlElement(name = "NetworkConfigSection")
+   protected NetworkConfigSection networkConfigSection;
+
+   @XmlElement(name = "SourcedVmInstantiationParams")
+   protected SourcedVmInstantiationParams sourcedVmInstantiationParams;
 
    @XmlElement(name = "AllEULAsAccepted")
    protected Boolean allEULAsAccepted;

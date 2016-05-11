@@ -28,6 +28,8 @@ import org.jclouds.vcloud.director.v1_5.domain.Reference;
 
 import com.google.common.base.Objects.ToStringHelper;
 import com.google.common.base.Objects;
+import org.jclouds.vcloud.director.v1_5.domain.section.GuestCustomizationSection;
+import org.jclouds.vcloud.director.v1_5.domain.section.NetworkConnectionSection;
 
 /**
  * Represents vApp creation parameters.
@@ -55,6 +57,8 @@ public class VAppCreationParams extends ParamsType {
    public abstract static class Builder<B extends Builder<B>> extends ParamsType.Builder<B> {
 
       private Reference vAppParent;
+      private NetworkConnectionSection networkConnectionSection;
+      private GuestCustomizationSection guestCustomizationSection;
       private InstantiationParams instantiationParams;
       private Boolean deploy;
       private Boolean powerOn;
@@ -122,6 +126,16 @@ public class VAppCreationParams extends ParamsType {
          this.powerOn = Boolean.FALSE;
          return self();
       }
+
+      public B networkConnectionSection(NetworkConnectionSection networkConnectionSection) {
+         this.networkConnectionSection = networkConnectionSection;
+         return self();
+      }
+
+      public B guestCustomizationSection(GuestCustomizationSection guestCustomizationSection) {
+         this.guestCustomizationSection = guestCustomizationSection;
+         return self();
+      }
       
       public B fromVAppCreationParamsType(VAppCreationParams in) {
          return fromParamsType(in).vAppParent(in.getVAppParent()).instantiationParams(in.getInstantiationParams()).deploy(in.isDeploy()).powerOn(in.isPowerOn());
@@ -138,7 +152,12 @@ public class VAppCreationParams extends ParamsType {
       this.instantiationParams = builder.instantiationParams;
       this.deploy = builder.deploy;
       this.powerOn = builder.powerOn;
+      this.networkConnectionSection = builder.networkConnectionSection;
+      this.guestCustomizationSection = builder.guestCustomizationSection;
    }
+
+   @XmlElement(name = "Source")
+   protected Reference source;
 
    @XmlElement(name = "VAppParent")
    protected Reference vAppParent;
@@ -148,6 +167,12 @@ public class VAppCreationParams extends ParamsType {
    protected Boolean deploy;
    @XmlAttribute
    protected Boolean powerOn;
+
+   @XmlElement(name = "NetworkConnectionSection")
+   protected NetworkConnectionSection networkConnectionSection;
+
+   @XmlElement(name = "GuestCustomizationSection")
+   protected GuestCustomizationSection guestCustomizationSection;
 
    /**
     * Reserved.
