@@ -24,9 +24,12 @@ import org.jclouds.http.HttpCommand;
 import org.jclouds.http.HttpResponse;
 import org.jclouds.http.annotation.ClientError;
 import org.jclouds.http.handlers.BackoffLimitedRetryHandler;
+import org.jclouds.logging.Logger;
 import org.jclouds.vcloud.director.v1_5.domain.VcloudDirectorError;
 
 import com.google.inject.Inject;
+
+import javax.annotation.Resource;
 
 /**
  * Handles Retryable responses with error codes in the 4xx range
@@ -35,6 +38,9 @@ public class VcloudDirectorClientErrorRetryHandler extends BackoffLimitedRetryHa
 
    private final VcloudDirectorUtils utils;
    private final Set<String> retryableCodes;
+
+   @Resource
+   protected Logger logger = Logger.NULL;
 
    @Inject
    protected VcloudDirectorClientErrorRetryHandler(VcloudDirectorUtils utils, 
@@ -51,6 +57,7 @@ public class VcloudDirectorClientErrorRetryHandler extends BackoffLimitedRetryHa
             closeClientButKeepContentStream(response);
             VcloudDirectorError error = utils.parseVcloudDirectorErrorFromContent(command.getCurrentRequest(), response);
             if (error != null) {
+
                return shouldRetryRequestOnError(command, response, error);
             }
          }
@@ -59,8 +66,11 @@ public class VcloudDirectorClientErrorRetryHandler extends BackoffLimitedRetryHa
    }
 
    protected boolean shouldRetryRequestOnError(HttpCommand command, HttpResponse response, VcloudDirectorError error) {
-      if (retryableCodes.contains(error.getMinorErrorCode()))
+      if (retryableCodes.contains(error.getMinorErrorCode())) {
+         // Since nowhere in org.jclouds.http.internal.BaseHttpCommandExecutorService retries are logged. I added this message.
+         logger.debug("VCD API returned an error that should be retried: {}", error);
          return super.shouldRetryRequest(command, response);
+      }
       return false;
    }
 
