@@ -43,6 +43,7 @@ import org.jclouds.vcloud.director.v1_5.config.VCloudDirectorHttpApiModule;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.inject.Module;
+import org.jclouds.vcloud.director.v1_5.http.okhttp.config.OkHttpCommandExecutorServiceVcloudModule;
 
 /**
  * Implementation of {@link org.jclouds.apis.ApiMetadata} for VCloudDirector 1.5 API
@@ -107,7 +108,7 @@ public class VCloudDirectorApiMetadata extends BaseHttpApiMetadata<VCloudDirecto
                  .view(typeToken(ComputeServiceContext.class))
                  .defaultModules(ImmutableSet.<Class<? extends Module>>of(
                          VCloudDirectorHttpApiModule.class,
-                         OkHttpCommandExecutorServiceModule.class,
+                         OkHttpCommandExecutorServiceVcloudModule.class,
                          VCloudDirectorComputeServiceContextModule.class));
       }
 
