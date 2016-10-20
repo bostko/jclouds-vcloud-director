@@ -48,12 +48,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import org.jclouds.vcloud.director.v1_5.domain.dmtf.cim.OSType;
 import org.jclouds.vcloud.director.v1_5.domain.dmtf.cim.ResourceAllocationSettingData;
 import org.jclouds.vcloud.director.v1_5.domain.dmtf.ovf.MsgType;
 import org.jclouds.vcloud.director.v1_5.domain.dmtf.ovf.ProductSection;
 import org.jclouds.vcloud.director.v1_5.AbstractVAppApiLiveTest;
 import org.jclouds.vcloud.director.v1_5.domain.Checks;
+
 import org.jclouds.vcloud.director.v1_5.domain.Metadata;
 import org.jclouds.vcloud.director.v1_5.domain.ProductSectionList;
 import org.jclouds.vcloud.director.v1_5.domain.RasdItemsList;
@@ -67,6 +70,7 @@ import org.jclouds.vcloud.director.v1_5.domain.VmPendingQuestion;
 import org.jclouds.vcloud.director.v1_5.domain.VmQuestionAnswer;
 import org.jclouds.vcloud.director.v1_5.domain.VmQuestionAnswerChoice;
 import org.jclouds.vcloud.director.v1_5.domain.dmtf.RasdItem;
+import org.jclouds.vcloud.director.v1_5.domain.dmtf.cim.CimString;
 import org.jclouds.vcloud.director.v1_5.domain.network.NetworkConnection;
 import org.jclouds.vcloud.director.v1_5.domain.network.NetworkConnection.IpAddressAllocationMode;
 import org.jclouds.vcloud.director.v1_5.domain.params.DeployVAppParams;
@@ -77,7 +81,7 @@ import org.jclouds.vcloud.director.v1_5.domain.section.NetworkConnectionSection;
 import org.jclouds.vcloud.director.v1_5.domain.section.OperatingSystemSection;
 import org.jclouds.vcloud.director.v1_5.domain.section.RuntimeInfoSection;
 import org.jclouds.vcloud.director.v1_5.domain.section.VirtualHardwareSection;
-import org.testng.annotations.AfterClass;
+import org.jclouds.vcloud.director.v1_5.functions.NextHDD;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
@@ -86,6 +90,8 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
+
+import javax.xml.namespace.QName;
 
 /**
  * Tests behavior of the {@link VmApi}.
@@ -96,14 +102,15 @@ public class VmApiLiveTest extends AbstractVAppApiLiveTest {
    private String metadataValue;
    private String key;
    private boolean testUserCreated = false;
+   protected String vappId;
 
    @BeforeClass(alwaysRun = true)
    protected void setupRequiredEntities() {
-      userUrn = api.getUserApi().addUserToOrg(randomTestUser("VAppAccessTest"), org.getId())
-              .getId();
+//      userUrn = api.getUserApi().addUserToOrg(randomTestUser("VAppAccessTest"), org.getId())
+//              .getId();
    }
 
-   @AfterClass(alwaysRun = true, dependsOnMethods = { "cleanUpEnvironment" })
+//   @AfterClass(alwaysRun = true, dependsOnMethods = { "cleanUpEnvironment" })
    public void cleanUp() {
       if (testUserCreated && userUrn != null) {
          try {
@@ -329,6 +336,26 @@ public class VmApiLiveTest extends AbstractVAppApiLiveTest {
       // Power on the Vm again
       vm = powerOnVm(vmUrn);
    }
+
+    @Test(description = "GET disks")
+    public void testGetDisks() {
+       logger.info("VM " + vm);
+
+        // see how it is best to integrate in brooklyn-blockstore
+
+       RasdItemsList disks = vmApi.getVirtualHardwareSectionDisks(vm.getId());
+
+       RasdItem newDisk = new NextHDD().apply(disks);
+
+       CimString hostResource = new CimString(Iterables.getFirst(newDisk.getHostResources(), null));
+       Preconditions.checkNotNull(hostResource, "HostResource for the existing disk should not be null");
+       hostResource.getOtherAttributes().put(new QName("http://www.vmware.com/vcloud/v1.5", "capacity"), "64000");
+       disks.add(RasdItem.builder()
+               .fromRasdItem(newDisk) // The same AddressOnParent (SCSI Controller)
+               .hostResources(ImmutableList.of(hostResource)) // NB! Use hostResources to override hostResources from newDisk
+               .build());
+       vmApi.editVirtualHardwareSectionDisks(vm.getId(), disks);
+    }
 
    @Test(description = "GET /vApp/{id}/guestCustomizationSection", dependsOnMethods = { "testGetVm" })
    public void testGetGuestCustomizationSection() {

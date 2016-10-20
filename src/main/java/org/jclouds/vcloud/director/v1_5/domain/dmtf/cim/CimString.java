@@ -47,6 +47,10 @@ public class CimString {
       this.value = value;
    }
 
+    public CimString(CimString cimString) {
+        this(cimString.getValue(), cimString.getOtherAttributes());
+    }
+
    public CimString(String value, Map<QName, String> otherAttributes) {
       this.value = value;
       this.otherAttributes = otherAttributes != null ? Maps.newLinkedHashMap(otherAttributes) : null;

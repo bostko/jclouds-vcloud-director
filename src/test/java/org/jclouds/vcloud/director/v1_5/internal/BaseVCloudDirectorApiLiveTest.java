@@ -142,6 +142,7 @@ public abstract class BaseVCloudDirectorApiLiveTest extends BaseApiLiveTest<VClo
    private Vdc vdc;
    protected String userUrn;
    private User user;
+   protected String vappId;
 
    protected final Set<String> vAppNames = Sets.newLinkedHashSet();
    protected static final Random random = new Random();
@@ -335,7 +336,7 @@ public abstract class BaseVCloudDirectorApiLiveTest extends BaseApiLiveTest<VClo
       }
       
       return optionalVm;
-   }   
+   }
    
    Function<Catalog, String> prettyCatalog = new Function<Catalog, String>() {
 
@@ -615,15 +616,16 @@ public abstract class BaseVCloudDirectorApiLiveTest extends BaseApiLiveTest<VClo
                .source(Reference.builder().href(lazyGetVAppTemplate().getHref()).build()).build();
 
       VdcApi vdcApi = api.getVdcApi();
-      VApp vAppInstantiated = vdcApi.instantiateVApp(vdcUrn, instantiate);
+      vappId = emptyToNull(System.getProperty("test." + provider + ".vapp-id"));
+      VApp vAppInstantiated = api.getVAppApi().get(vappId);
       assertNotNull(vAppInstantiated, String.format(ENTITY_NON_NULL, VAPP));
 
       Task instantiationTask = getFirst(vAppInstantiated.getTasks(), null);
-      if (instantiationTask != null)
+      if (instantiationTask != null) {
          assertTaskSucceedsLong(instantiationTask);
-
+      }
       // Save VApp name for cleanUp
-      vAppNames.add(name);
+      vAppNames.add(vAppInstantiated.getName());
 
       return vAppInstantiated;
    }
