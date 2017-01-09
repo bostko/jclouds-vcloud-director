@@ -42,7 +42,7 @@ import com.google.inject.Module;
 @Test(groups = "live", singleThreaded = true, testName = "VCloudDirectorComputeServiceAdapterLiveTest")
 public class VCloudDirectorComputeServiceAdapterLiveTest extends BaseVCloudDirectorApiLiveTest {
 
-   private VCloudDirectorComputeServiceAdapter adapter;
+
    private TemplateBuilder templateBuilder;
    private ComputeServiceAdapter.NodeAndInitialCredentials<Vm> guest;
 

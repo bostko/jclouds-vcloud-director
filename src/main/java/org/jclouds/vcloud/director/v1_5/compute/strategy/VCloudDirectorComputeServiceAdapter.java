@@ -438,7 +438,7 @@ public class VCloudDirectorComputeServiceAdapter implements
       return referenceOptional.get();
    }
 
-   private SourcedCompositionItemParam createVmItem(Vm vm, String networkName, GuestCustomizationSection guestCustomizationSection) {
+   public SourcedCompositionItemParam createVmItem(Vm vm, String networkName, GuestCustomizationSection guestCustomizationSection) {
       // creating an item element. this item will contain the vm which should be added to the vapp.
       final String name = name("vm-");
       Reference reference = Reference.builder().name(name).href(vm.getHref()).type(vm.getType()).build();
